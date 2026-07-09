@@ -164,7 +164,23 @@ Regional Access Boundary HTTP request failed after retries: ... 'Gaia id not fou
 이런 계정 인식 오류가 나면 최신 `gcloud storage` 명령 대신 구버전 `gsutil ls` / `gsutil cors set`을 써본다. 그래도 안 되면 Cloud Shell 메뉴(⋮) → "Cloud Shell 재시작" 후 재시도한다. 근본 원인(버킷 자체가 없음)은 CLI 인증과 무관하므로, 이런 에러가 나도 결국 위 1~2단계(Blaze 업그레이드 + Storage 초기화)를 먼저 해결해야 한다.
 
 ### 이 프로젝트에서 실제 있었던 일
-Cloud Shell에서 `gsutil cors set ... gs://class-bgm-pad.firebasestorage.app`이 "bucket does not exist"로 실패 → `gcloud storage buckets list`도 0개 반환(도중에 Gaia ID 인증 에러도 겹침) → Firebase 콘솔 Storage 화면을 직접 확인하니 "프로젝트 업그레이드" 안내가 떠 있었고, Spark 요금제라 Storage가 아예 초기화되지 않은 상태였음을 확인 → Blaze로 업그레이드 후 Storage "시작하기"로 버킷을 생성해서 해결했다.
+Cloud Shell에서 `gsutil cors set ... gs://class-bgm-pad.firebasestorage.app`이 "bucket does not exist"로 실패 → `gcloud storage buckets list`도 0개 반환(도중에 Gaia ID 인증 에러도 겹침) → Firebase 콘솔 Storage 화면을 직접 확인하니 "프로젝트 업그레이드" 안내가 떠 있었고, Spark 요금제라 Storage가 아예 초기화되지 않은 상태였음을 확인 → Blaze로 업그레이드 후 Storage "시작하기"로 버킷을 생성 → 그 버킷 이름으로 CORS 설정(문제 3) 및 Vercel `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` 값을 맞추고 재배포 → **버튼 추가 화면에서 음원 업로드가 실제로 성공하는 것까지 확인**해서 완전히 해결됐다.
+
+---
+
+## Firebase Storage를 새로 쓰는 웹앱을 처음부터 설정할 때 (권장 순서)
+
+문제 2·3·4는 서로 원인이 다르지만 실제로는 **하나의 흐름 안에서 순서대로** 부딪히기 쉽다. 새 프로젝트를 처음 배포할 때는 아래 순서로 미리 진행하면 각 문제를 하나씩 따로 겪지 않아도 된다.
+
+1. Firebase 프로젝트 생성 → Firestore 생성 (여기까지는 무료 Spark로 충분, 문제 없음).
+2. **Storage를 열어 Blaze로 업그레이드하고 "시작하기"로 버킷을 실제로 생성한다** (문제 4). 이 단계를 건너뛰면 이후 모든 게 실패한다.
+3. Storage 화면에 표시된 **정확한 버킷 이름**을 확인한다.
+4. 그 버킷 이름으로 **CORS를 설정한다** (문제 3) — `gsutil cors set cors.json gs://<버킷 이름>`.
+5. Vercel(또는 다른 배포 환경)에 **6개 `EXPO_PUBLIC_FIREBASE_*` 환경변수**를 등록한다 (문제 2) — `STORAGE_BUCKET` 값이 3번에서 확인한 이름과 정확히 일치해야 한다.
+6. **재배포**한다 (환경변수는 저장만으로는 반영되지 않는다).
+7. 배포된 링크에서 브라우저 콘솔을 열어둔 채로 버튼을 하나 추가해보고, 업로드가 100%까지 끝나는지 직접 확인한다.
+
+이 순서를 지키면 "버킷 없음 → CORS 에러 → 환경변수 에러"를 번갈아 겪는 대신 한 번에 끝낼 수 있다.
 
 ---
 
