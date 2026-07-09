@@ -298,7 +298,30 @@ Firestore의 기본 전송(WebChannel 스트리밍)은 일부 프록시/보안 �
 3. 교차 확인에서 다른 네트워크로는 되면 네트워크(프록시/방화벽) 문제로 확정.
 
 ### 이 프로젝트에서 실제 있었던 일
-문제 7 수정 배포(a86b30a) 후에도 사용자 환경에서 저장이 계속 멈췄다. 파일은 Storage에 올라가고 새로고침하면 버튼이 사라지는 패턴에서 Firestore 쓰기 미커밋을 의심 → 위 3가지(롱폴링 강제 + 단계 표시 + 쓰기 타임아웃)를 한 번에 적용했다.
+문제 7 수정 배포(a86b30a) 후에도 사용자 환경에서 저장이 계속 멈췄다. 파일은 Storage에 올라가고 새로고침하면 버튼이 사라지는 패턴에서 Firestore 쓰기 미커밋을 의심 → 위 3가지(롱폴링 강제 + 단계 표시 + 쓰기 타임아웃)를 한 번에 적용했다. 배포 후 단계 표시 덕분에 "버튼 정보 저장" 단계에서 20초 타임아웃이 발생하는 것이 화면에 그대로 확인됐다 — **Firestore 쓰기 멈춤으로 확정**. 그러나 `experimentalForceLongPolling`으로도 해결되지 않아, 최종적으로 문제 9(REST API 쓰기 전환)로 해결했다.
+
+---
+
+## 문제 9: forceLongPolling으로도 Firestore 쓰기가 안 됨 → 웹 쓰기를 REST API로 전환 (최종 해결)
+
+### 증상
+문제 8의 대응(롱폴링 강제)을 배포한 뒤에도, 단계 표시가 "버튼 정보 저장 중..."에서 멈추고 20초 타임아웃 알림이 떴다. 즉 이 네트워크에서는 Firestore SDK의 전송(WebChannel)으로는 어떤 설정을 해도 쓰기가 서버에 도달하지 못한다.
+
+### 판단 근거
+- 같은 네트워크에서 **Storage 업로드(단순 POST fetch)는 성공**한다 → 일반적인 HTTPS POST는 통과된다.
+- Firestore **읽기(onSnapshot 실시간 구독)는 동작**한다 → 문제는 오직 SDK의 쓰기 스트림.
+- 결론: SDK의 특수한 스트리밍 전송만 막히는 환경이므로, 쓰기를 **단순 HTTP 요청(Firestore REST API)** 으로 바꾸면 통과된다.
+
+### 해결 방법 (이미 이 프로젝트에 적용됨)
+`src/services/firestoreService.web.ts`를 만들어 웹에서만:
+- **읽기**: SDK `onSnapshot` 유지 (실시간 갱신 동작 확인됨)
+- **쓰기(추가/수정/삭제)**: `https://firestore.googleapis.com/v1/projects/<PID>/databases/(default)/documents/...`에 fetch로 직접 POST/PATCH/DELETE
+- 값은 REST 형식(`{stringValue}`, `{doubleValue}`, `{booleanValue}`, `{timestampValue}`)으로 인코딩. `serverTimestamp()` 대신 클라이언트 시각(`new Date().toISOString()`)을 timestampValue로 사용 (이 앱에서 시각은 정렬용이라 충분).
+- **주의: PATCH(수정)에는 반드시 `updateMask.fieldPaths=...`를 붙여야 한다.** 안 붙이면 문서 전체가 교체되어, 이번에 안 보낸 필드(음원 교체 없이 수정 시 audioUrl/storagePath)가 삭제된다.
+- REST 쓰기도 보안 규칙을 동일하게 적용받고, 실패 시 HTTP 상태코드가 에러 알림에 그대로 표시되므로 진단이 쉽다.
+
+### 교훈
+"읽기는 되는데 쓰기만 조용히 멈춘다"면 SDK 설정을 계속 만지는 것보다, **같은 네트워크에서 확실히 통과되는 방식(단순 fetch)이 무엇인지 확인하고 그 방식으로 우회**하는 것이 빠르다. Storage 업로드 성공이 그 증거 역할을 했다.
 
 ---
 
@@ -313,3 +336,4 @@ Firestore의 기본 전송(WebChannel 스트리밍)은 일부 프록시/보안 �
 7. **웹에서** 뭔가 저장/삭제가 "그냥 멈춘 것처럼" 보이고 에러 팝업이 안 뜨면, 진짜 아무 문제가 없는 게 아니라 문제 5(`Alert.alert`가 웹에서 무음)일 가능성이 크다 — 코드에 `Alert.alert`가 새로 추가되지 않았는지부터 확인한다.
 8. **재배포했는데 화면이 그대로**면, 먼저 Vercel Deployments에서 배포된 커밋 해시가 최신인지 확인한다. 커밋은 맞는데 화면이 그대로면 코드 문제가 아니라 문제 6(캐싱)이다 — 하드 리프레시/시크릿 창으로 먼저 확인하고, `vercel.json`의 `headers` 캐시 설정을 점검한다.
 9. **업로드가 웹에서 100%에서 안 끝나면**, 타임아웃 에러 알림이 뜨는지 먼저 기다려보고, Firebase 콘솔에서 파일이 실제로 올라갔는지 확인한다. 파일은 올라갔는데 화면만 멈춰있다면 문제 3(CORS 미설정)이 아니라 문제 7(resumable 업로드의 CORS 헤더 노출 문제)이다 — 버킷 CORS를 아무리 고쳐도 소용없고, `uploadBytes`로 바꿔야 한다.
+10. 화면 단계 표시가 **"버튼 정보 저장 중..."에서 타임아웃**되면 Firestore 쓰기 문제다(문제 8→9). SDK 설정(롱폴링 등)으로 안 풀리면 웹 쓰기는 이미 REST API로 전환되어 있으니(firestoreService.web.ts), 에러 알림에 표시되는 HTTP 상태코드를 읽는다 — 403이면 보안 규칙, 타임아웃이면 네트워크가 firestore.googleapis.com 자체를 차단하는 것.
