@@ -30,3 +30,14 @@ export interface AppSettings {
   defaultLoop: boolean;
   defaultVolume: number;
 }
+
+/**
+ * 재생 상태의 플랫폼 공통 표현.
+ * audioService(네이티브)/audioService.web(웹)이 각자의 재생 엔진 상태를 이 형태로 변환해서 알려준다.
+ * PlayerContext는 이 타입만 알면 되고, 실제 재생 엔진이 무엇인지는 몰라도 된다.
+ */
+export interface PlayerStatus {
+  activeButtonId: string | null;
+  isPlaying: boolean;
+  isBuffering: boolean;
+}

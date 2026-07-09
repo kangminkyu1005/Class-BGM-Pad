@@ -1,9 +1,9 @@
 // 앱 전역에서 "지금 어떤 버튼이 재생 중인가"를 공유하기 위한 React Context.
-// react-native-track-player의 상태(useActiveTrack/usePlaybackState)를 구독해서
-// HomeScreen의 버튼 카드, PlayerBar 등 여러 화면/컴포넌트가 동일한 재생 상태를 바라보게 한다.
+// audioService(네이티브: react-native-track-player / 웹: HTML5 Audio)가 내보내는
+// 공통 상태(PlayerStatus)를 구독해서, HomeScreen의 버튼 카드/PlayerBar 등이 동일한 재생 상태를 바라보게 한다.
+// 이 파일은 어떤 재생 엔진을 쓰는지 전혀 알지 못한다 (플랫폼에 무관하게 그대로 재사용된다).
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { State, useActiveTrack, usePlaybackState } from 'react-native-track-player';
-import { BgmButton } from '../types';
+import { BgmButton, PlayerStatus } from '../types';
 import * as audioService from '../services/audioService';
 
 interface PlayerContextValue {
@@ -19,17 +19,27 @@ interface PlayerContextValue {
   stopAll: () => Promise<void>;
 }
 
+const INITIAL_STATUS: PlayerStatus = {
+  activeButtonId: null,
+  isPlaying: false,
+  isBuffering: false,
+};
+
 const PlayerContext = createContext<PlayerContextValue | undefined>(undefined);
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
+  const [status, setStatus] = useState<PlayerStatus>(INITIAL_STATUS);
   const [isBusy, setIsBusy] = useState(false);
-  const activeTrack = useActiveTrack();
-  const playbackState = usePlaybackState();
 
   useEffect(() => {
-    audioService.setupPlayer().catch((error) => {
-      console.warn('[PlayerContext] TrackPlayer 초기화 실패:', error);
-    });
+    audioService
+      .setupPlayer()
+      .then(() => setStatus(audioService.getStatus()))
+      .catch((error) => {
+        console.warn('[PlayerContext] 오디오 초기화 실패:', error);
+      });
+
+    return audioService.subscribeStatus(setStatus);
   }, []);
 
   const play = useCallback(async (button: BgmButton) => {
@@ -55,16 +65,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<PlayerContextValue>(
     () => ({
-      activeButtonId: (activeTrack?.id as string | undefined) ?? null,
-      isPlaying: playbackState.state === State.Playing,
-      isBusy:
-        isBusy || playbackState.state === State.Loading || playbackState.state === State.Buffering,
+      activeButtonId: status.activeButtonId,
+      isPlaying: status.isPlaying,
+      isBusy: isBusy || status.isBuffering,
       play,
       pause,
       resume,
       stopAll,
     }),
-    [activeTrack, playbackState.state, isBusy, play, pause, resume, stopAll]
+    [status, isBusy, play, pause, resume, stopAll]
   );
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;

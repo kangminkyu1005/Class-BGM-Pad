@@ -95,7 +95,7 @@ export function EditButtonScreen({ navigation, route }: Props) {
       // 음원이 교체됐다면, 기존 Storage 파일과 기존 캐시 파일은 더 이상 필요 없으므로 정리한다.
       if (storagePath) {
         await deleteAudioFile(button.storagePath);
-        removeCachedFile(button);
+        await removeCachedFile(button);
         // 현재 재생 중이던 음원이 이 버튼이었다면, 이제 가리키는 파일이 바뀌었으니 정지시킨다.
         if (activeButtonId === button.id) {
           await stopAll();
@@ -120,7 +120,7 @@ export function EditButtonScreen({ navigation, route }: Props) {
       }
       await deleteButtonDoc(button.id);
       await deleteAudioFile(button.storagePath);
-      removeCachedFile(button);
+      await removeCachedFile(button);
       navigation.goBack();
     } catch (error) {
       console.warn('[EditButtonScreen] 삭제 실패:', error);

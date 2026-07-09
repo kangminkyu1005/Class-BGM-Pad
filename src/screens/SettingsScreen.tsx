@@ -26,7 +26,7 @@ export function SettingsScreen(_props: Props) {
   const [loaded, setLoaded] = useState(false);
 
   const refreshCacheSize = useCallback(() => {
-    setCacheSize(getCacheSizeBytes());
+    getCacheSizeBytes().then(setCacheSize);
   }, []);
 
   useEffect(() => {
@@ -52,8 +52,7 @@ export function SettingsScreen(_props: Props) {
         text: '삭제',
         style: 'destructive',
         onPress: () => {
-          clearCache();
-          refreshCacheSize();
+          clearCache().then(refreshCacheSize);
         },
       },
     ]);

@@ -1,15 +1,35 @@
-// react-native-track-player를 감싸는 얇은 래퍼.
+// react-native-track-player를 감싸는 얇은 래퍼. (네이티브 전용 구현)
 // 앱의 나머지 코드(Context/화면)는 TrackPlayer를 직접 다루지 않고 이 모듈의 함수만 사용한다.
-// -> 나중에 오디오 라이브러리를 바꾸더라도 이 파일만 고치면 되도록 관심사를 분리한다.
+// 웹 빌드에서는 Metro가 이 파일 대신 같은 이름의 audioService.web.ts를 자동으로 선택하므로,
+// 두 파일은 반드시 동일한 함수 시그니처(이름/파라미터/반환 타입)를 유지해야 한다.
 import TrackPlayer, {
   AppKilledPlaybackBehavior,
   Capability,
+  Event,
   RepeatMode,
+  State,
 } from 'react-native-track-player';
-import { BgmButton } from '../types';
+import { BgmButton, PlayerStatus } from '../types';
 import { getPlaybackUri } from './cacheService';
 
 let didSetupPlayer = false;
+let currentActiveButtonId: string | null = null;
+let currentPlaybackState: State = State.None;
+let statusListeners: Array<(status: PlayerStatus) => void> = [];
+
+function computeStatus(): PlayerStatus {
+  return {
+    activeButtonId: currentActiveButtonId,
+    isPlaying: currentPlaybackState === State.Playing,
+    isBuffering:
+      currentPlaybackState === State.Loading || currentPlaybackState === State.Buffering,
+  };
+}
+
+function emitStatus(): void {
+  const status = computeStatus();
+  statusListeners.forEach((listener) => listener(status));
+}
 
 /** 앱 시작 시(또는 첫 재생 직전) 한 번만 호출되는 TrackPlayer 초기화. */
 export async function setupPlayer(): Promise<void> {
@@ -25,6 +45,16 @@ export async function setupPlayer(): Promise<void> {
     capabilities: [Capability.Play, Capability.Pause, Capability.Stop],
     compactCapabilities: [Capability.Play, Capability.Pause, Capability.Stop],
     notificationCapabilities: [Capability.Play, Capability.Pause, Capability.Stop],
+  });
+
+  // PlayerContext가 화면에 "현재 재생 버튼 / 재생 중 여부"를 보여줄 수 있도록 상태 변화를 구독해둔다.
+  TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) => {
+    currentActiveButtonId = (event.track?.id as string | undefined) ?? null;
+    emitStatus();
+  });
+  TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
+    currentPlaybackState = event.state;
+    emitStatus();
   });
 
   didSetupPlayer = true;
@@ -67,4 +97,17 @@ export async function resumePlayback(): Promise<void> {
 /** 전체 정지 버튼에서 사용. 큐를 완전히 비워서 재생/알림을 모두 종료한다. */
 export async function stopAll(): Promise<void> {
   await TrackPlayer.reset();
+}
+
+/** 현재 재생 상태의 스냅샷. (구독 전 초기값을 그릴 때 사용) */
+export function getStatus(): PlayerStatus {
+  return computeStatus();
+}
+
+/** 재생 상태가 바뀔 때마다 호출될 리스너를 등록한다. 반환된 함수를 호출하면 구독이 해제된다. */
+export function subscribeStatus(listener: (status: PlayerStatus) => void): () => void {
+  statusListeners.push(listener);
+  return () => {
+    statusListeners = statusListeners.filter((l) => l !== listener);
+  };
 }

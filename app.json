@@ -32,7 +32,13 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "Class BGM Pad",
+      "shortName": "BGM Pad",
+      "themeColor": "#0F1220",
+      "backgroundColor": "#0F1220",
+      "display": "standalone",
+      "lang": "ko"
     },
     "plugins": [
       [
