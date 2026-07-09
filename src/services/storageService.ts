@@ -1,5 +1,7 @@
-// Firebase Storage에 음원 파일을 업로드/삭제하는 서비스.
+// Firebase Storage에 음원 파일을 업로드/삭제하는 서비스. (네이티브 전용 구현)
 // 로컬 파일(uri)을 fetch로 읽어 Blob으로 변환한 뒤 Storage에 올리는, React Native + Firebase JS SDK의 표준 방식을 사용한다.
+// 웹 빌드에서는 Metro가 이 파일 대신 storageService.web.ts를 선택한다 (이유는 그 파일 상단 주석 참고).
+// -> 두 파일은 반드시 동일한 함수 시그니처(이름/파라미터/반환 타입)를 유지해야 한다.
 import {
   deleteObject,
   getDownloadURL,

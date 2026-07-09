@@ -1,6 +1,6 @@
 ---
 name: deploy-troubleshooting
-description: Class BGM Pad 프로젝트의 GitHub push 권한 오류, Vercel 배포 시 Firebase 환경변수/Storage 버킷 오류, 웹앱에서 음원 업로드 시 CORS 오류, Firebase Storage 버킷이 존재하지 않는(Blaze 요금제 필요) 오류, 웹에서 저장/삭제 실패 시 아무 메시지도 안 뜨고 스피너가 멈추지 않는 문제, 재배포했는데도 브라우저에 예전 화면이 그대로 보이는(캐시) 문제를 진단하고 해결하는 가이드. "git push"가 403/permission denied로 실패하거나, 배포한 웹앱 콘솔에 "Firebase 환경변수가 설정되지 않았습니다" / "storage/no-default-bucket" / "has been blocked by CORS policy" 에러가 뜨거나, gsutil이 "The specified bucket does not exist"를 내거나, 웹에서 버튼 추가/수정/삭제가 조용히 실패(에러 문구 없이 로딩만 계속됨)하거나, 최신 커밋을 배포했는데도 변경사항이 반영 안 될 때 사용한다.
+description: Class BGM Pad 프로젝트의 GitHub push 권한 오류, Vercel 배포 시 Firebase 환경변수/Storage 버킷 오류, 웹앱에서 음원 업로드 시 CORS 오류, Firebase Storage 버킷이 존재하지 않는(Blaze 요금제 필요) 오류, 웹에서 저장/삭제 실패 시 아무 메시지도 안 뜨고 스피너가 멈추지 않는 문제, 재배포했는데도 브라우저에 예전 화면이 그대로 보이는(캐시) 문제, 파일은 Storage에 실제로 올라갔는데 웹 화면은 계속 업로드 중으로 멈춰있는(resumable 업로드 CORS 헤더 노출) 문제를 진단하고 해결하는 가이드. "git push"가 403/permission denied로 실패하거나, 배포한 웹앱 콘솔에 "Firebase 환경변수가 설정되지 않았습니다" / "storage/no-default-bucket" / "has been blocked by CORS policy" 에러가 뜨거나, gsutil이 "The specified bucket does not exist"를 내거나, 웹에서 버튼 추가/수정/삭제가 조용히 실패(에러 문구 없이 로딩만 계속됨)하거나, 최신 커밋을 배포했는데도 변경사항이 반영 안 되거나, Storage에는 파일이 올라갔는데 업로드 진행률이 100%에서 멈춰있을 때 사용한다.
 ---
 
 # Class BGM Pad 배포 문제 해결 가이드
@@ -242,6 +242,39 @@ Vercel Deployments에서 최신 커밋(해시 일치)이 배포된 걸 확인했
 
 ---
 
+## 문제 7: 파일은 실제로 Storage에 올라가는데 웹 화면은 계속 "업로드 중 100%"에서 멈춤
+
+### 증상
+- 버튼 추가 화면에서 진행률이 100%까지 가고 저장 버튼이 계속 로딩 상태로 멈춘다 (문제 5의 60초 타임아웃을 넣은 뒤에도 재현됨).
+- Firebase 콘솔 → Storage에 들어가 보면 **파일은 실제로 올라가 있다.** 즉 업로드 자체는 서버 쪽에서 성공했다.
+- 개발자 도구 Network 탭에서 `firebasestorage.googleapis.com`으로 가는 요청을 보면, **preflight(OPTIONS) 요청만 200으로 성공**하고 그 뒤에 이어져야 할 실제 업로드 요청이 안 보이거나, 있어도 클라이언트가 완료를 인식하지 못한다.
+- preflight 응답 헤더를 까보면:
+  ```
+  Access-Control-Allow-Methods: POST, GET, HEAD, DELETE, PATCH
+  Access-Control-Expose-Headers: Content-Range, X-Firebase-Storage-XSRF
+  ```
+  `X-Goog-Upload-Status`, `X-Goog-Upload-URL` 같은, 재개 가능한(resumable) 업로드 프로토콜이 필요로 하는 헤더들이 `Access-Control-Expose-Headers`에 없다.
+
+### 원인
+`uploadBytesResumable()`(재개 가능한 업로드)은 여러 요청에 걸쳐 진행되며, 각 단계마다 서버 응답의 커스텀 헤더(`X-Goog-Upload-Status` 등)를 읽어서 "다음에 뭘 해야 하는지/끝났는지"를 판단한다. 그런데 **Firebase Storage REST API(`firebasestorage.googleapis.com`) 자체의 CORS 정책은 이 헤더들을 `Access-Control-Expose-Headers`로 노출하지 않는다.** 이건 GCS 버킷 레벨 CORS(문제 3에서 `gsutil cors set`으로 설정한 것)와는 **완전히 별개**의, Firebase가 자체적으로 고정해둔 CORS 정책이라 버킷 CORS를 아무리 고쳐도 해결되지 않는다.
+
+결과: 파일 바이트 자체는 정상적으로 서버에 전달되어 업로드가 "실제로는" 끝나지만, 브라우저의 JS 코드는 완료 여부를 알려주는 헤더를 CORS 때문에 읽지 못해서 완료 신호를 영원히 받지 못한다 → 클라이언트 쪽에서만 무한 대기 상태로 보인다.
+
+### 해결 방법 (이미 이 프로젝트에 적용됨)
+웹에서만 `uploadBytesResumable` 대신 **`uploadBytes()`(단일 요청 멀티파트 업로드)** 를 쓰도록 `src/services/storageService.web.ts`를 새로 만들었다. `uploadBytes`는 POST 요청 하나로 끝나고 완료 여부를 응답 **바디(JSON)** 로 확인하는데, 응답 바디를 읽는 건 `Access-Control-Expose-Headers`와 무관하게 항상 허용되므로 이 문제 자체가 발생하지 않는다. (대신 세밀한 업로드 진행률(%)은 못 보여주고 시작/완료만 표시한다 — 음원 파일 크기 정도에서는 크게 문제되지 않는다.)
+
+네이티브(`storageService.ts`)는 이 CORS 문제가 없으므로(브라우저가 아니라 CORS 자체가 적용 안 됨) 그대로 `uploadBytesResumable`을 유지해 업로드 진행률을 계속 보여준다.
+
+### 진단 순서 요약 (다음에 비슷한 걸 겪으면)
+1. Firebase 콘솔 Storage에서 **파일이 실제로 올라갔는지** 먼저 확인한다. 올라가 있으면 서버 문제가 아니라 클라이언트가 완료를 인식 못 하는 문제다.
+2. Network 탭에서 preflight 요청을 클릭해 **Access-Control-Expose-Headers**에 SDK가 필요로 하는 헤더가 빠져있는지 확인한다.
+3. `uploadBytesResumable` 대신 `uploadBytes`로 바꿔서 재현되는지 본다.
+
+### 이 프로젝트에서 실제 있었던 일
+문제 5(60초 타임아웃)를 넣은 뒤에도 웹에서 업로드가 계속 100%에서 멈췄다. Network 탭을 `firebasestorage`로 필터링해보니 preflight만 200으로 성공하고 실제 요청이 안 보였고, 사용자가 Firebase 콘솔에서 파일이 실제로는 올라가 있는 것을 확인했다. preflight 응답의 `Access-Control-Expose-Headers`에 `X-Goog-Upload-*` 계열 헤더가 없는 것을 확인 → 웹 전용 `storageService.web.ts`를 만들어 `uploadBytes`로 교체해서 해결했다.
+
+---
+
 ## 새로운 배포 문제를 진단할 때 공통 체크리스트
 
 1. 브라우저/터미널에 찍힌 **정확한 에러 메시지 전문**을 먼저 확인한다 (요약하지 말고 그대로).
@@ -252,3 +285,4 @@ Vercel Deployments에서 최신 커밋(해시 일치)이 배포된 걸 확인했
 6. `gsutil`/`gcloud`가 "bucket does not exist"를 내면 CORS 설정(문제 3)보다 먼저 문제 4(Storage가 아예 초기화 안 됨/Blaze 요금제 필요)를 의심하고, Firebase 콘솔 Storage 화면을 직접 확인한다.
 7. **웹에서** 뭔가 저장/삭제가 "그냥 멈춘 것처럼" 보이고 에러 팝업이 안 뜨면, 진짜 아무 문제가 없는 게 아니라 문제 5(`Alert.alert`가 웹에서 무음)일 가능성이 크다 — 코드에 `Alert.alert`가 새로 추가되지 않았는지부터 확인한다.
 8. **재배포했는데 화면이 그대로**면, 먼저 Vercel Deployments에서 배포된 커밋 해시가 최신인지 확인한다. 커밋은 맞는데 화면이 그대로면 코드 문제가 아니라 문제 6(캐싱)이다 — 하드 리프레시/시크릿 창으로 먼저 확인하고, `vercel.json`의 `headers` 캐시 설정을 점검한다.
+9. **업로드가 웹에서 100%에서 안 끝나면**, 타임아웃 에러 알림이 뜨는지 먼저 기다려보고, Firebase 콘솔에서 파일이 실제로 올라갔는지 확인한다. 파일은 올라갔는데 화면만 멈춰있다면 문제 3(CORS 미설정)이 아니라 문제 7(resumable 업로드의 CORS 헤더 노출 문제)이다 — 버킷 CORS를 아무리 고쳐도 소용없고, `uploadBytes`로 바꿔야 한다.
