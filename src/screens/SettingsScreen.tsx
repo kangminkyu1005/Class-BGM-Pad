@@ -1,8 +1,9 @@
 // 설정 화면: 새 버튼 추가 시 기본으로 쓰일 반복재생/볼륨 값과, 로컬 오디오 캐시 관리를 제공한다.
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { LoopToggle } from '../components/LoopToggle';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { VolumeSlider } from '../components/VolumeSlider';
@@ -24,6 +25,7 @@ export function SettingsScreen(_props: Props) {
   const [defaultVolume, setDefaultVolume] = useState(1);
   const [cacheSize, setCacheSize] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [confirmClearVisible, setConfirmClearVisible] = useState(false);
 
   const refreshCacheSize = useCallback(() => {
     getCacheSizeBytes().then(setCacheSize);
@@ -45,17 +47,9 @@ export function SettingsScreen(_props: Props) {
     });
   }, [loaded, defaultLoop, defaultVolume]);
 
-  function handleClearCache() {
-    Alert.alert('캐시 비우기', '기기에 저장된 음원 캐시를 모두 삭제할까요?', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '삭제',
-        style: 'destructive',
-        onPress: () => {
-          clearCache().then(refreshCacheSize);
-        },
-      },
-    ]);
+  function handleConfirmedClearCache() {
+    setConfirmClearVisible(false);
+    clearCache().then(refreshCacheSize);
   }
 
   return (
@@ -80,10 +74,23 @@ export function SettingsScreen(_props: Props) {
             <Text style={styles.cacheHelper}>
               자주 재생한 음원은 기기에 저장되어, 네트워크가 불안정해도 끊김 없이 재생됩니다.
             </Text>
-            <PrimaryButton label="캐시 비우기" variant="secondary" onPress={handleClearCache} />
+            <PrimaryButton
+              label="캐시 비우기"
+              variant="secondary"
+              onPress={() => setConfirmClearVisible(true)}
+            />
           </View>
         </View>
       </View>
+
+      <ConfirmModal
+        visible={confirmClearVisible}
+        title="캐시를 비울까요?"
+        message="기기에 저장된 음원 캐시를 모두 삭제합니다. 다음 재생 시 다시 다운로드됩니다."
+        confirmLabel="비우기"
+        onConfirm={handleConfirmedClearCache}
+        onCancel={() => setConfirmClearVisible(false)}
+      />
     </SafeAreaView>
   );
 }

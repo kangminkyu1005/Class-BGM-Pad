@@ -3,7 +3,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as DocumentPicker from 'expo-document-picker';
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ColorPicker } from '../components/ColorPicker';
 import { IconPicker } from '../components/IconPicker';
@@ -16,6 +16,7 @@ import { createButton } from '../services/firestoreService';
 import { DEFAULT_SETTINGS, getSettings } from '../services/settingsService';
 import { uploadAudioFile } from '../services/storageService';
 import { RootStackParamList } from '../navigation/types';
+import { showAlert } from '../utils/alert';
 import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS } from '../utils/audioFile';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddButton'>;
@@ -47,7 +48,7 @@ export function AddButtonScreen({ navigation }: Props) {
 
     const asset = result.assets[0];
     if (!isSupportedAudioFile(asset.name)) {
-      Alert.alert(
+      showAlert(
         '지원하지 않는 파일 형식',
         `${SUPPORTED_AUDIO_EXTENSIONS.join(', ')} 형식의 파일만 사용할 수 있습니다.`
       );
@@ -61,15 +62,15 @@ export function AddButtonScreen({ navigation }: Props) {
     const trimmedCategory = category.trim();
 
     if (!trimmedTitle) {
-      Alert.alert('입력 확인', '버튼 이름을 입력해주세요.');
+      showAlert('입력 확인', '버튼 이름을 입력해주세요.');
       return;
     }
     if (!trimmedCategory) {
-      Alert.alert('입력 확인', '카테고리를 입력해주세요.');
+      showAlert('입력 확인', '카테고리를 입력해주세요.');
       return;
     }
     if (!pickedFile) {
-      Alert.alert('입력 확인', '음원 파일을 선택해주세요.');
+      showAlert('입력 확인', '음원 파일을 선택해주세요.');
       return;
     }
 
@@ -94,7 +95,8 @@ export function AddButtonScreen({ navigation }: Props) {
       navigation.goBack();
     } catch (error) {
       console.warn('[AddButtonScreen] 저장 실패:', error);
-      Alert.alert('저장 실패', '버튼을 저장하는 중 오류가 발생했습니다. 다시 시도해주세요.');
+      const detail = error instanceof Error ? error.message : String(error);
+      showAlert('저장 실패', `버튼을 저장하는 중 오류가 발생했습니다.\n\n${detail}`);
     } finally {
       setSaving(false);
     }

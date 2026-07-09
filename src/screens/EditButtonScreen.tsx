@@ -1,10 +1,10 @@
 // 기존 BGM 버튼 수정 화면.
-// HomeScreen에서 카드를 길게 눌러 진입하며, route.params.button으로 기존 값을 전달받아 폼을 채운다.
+// HomeScreen에서 카드를 길게 누르거나 연필 아이콘을 눌러 진입하며, route.params.button으로 기존 값을 전달받아 폼을 채운다.
 // 음원 파일은 선택적으로 교체할 수 있고(교체 시 기존 Storage 파일은 삭제), 삭제는 확인창을 거친다.
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as DocumentPicker from 'expo-document-picker';
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ColorPicker } from '../components/ColorPicker';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -18,6 +18,7 @@ import { RootStackParamList } from '../navigation/types';
 import { removeCachedFile } from '../services/cacheService';
 import { deleteButtonDoc, updateButton } from '../services/firestoreService';
 import { deleteAudioFile, uploadAudioFile } from '../services/storageService';
+import { showAlert } from '../utils/alert';
 import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS } from '../utils/audioFile';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditButton'>;
@@ -49,7 +50,7 @@ export function EditButtonScreen({ navigation, route }: Props) {
 
     const asset = result.assets[0];
     if (!isSupportedAudioFile(asset.name)) {
-      Alert.alert(
+      showAlert(
         '지원하지 않는 파일 형식',
         `${SUPPORTED_AUDIO_EXTENSIONS.join(', ')} 형식의 파일만 사용할 수 있습니다.`
       );
@@ -62,7 +63,7 @@ export function EditButtonScreen({ navigation, route }: Props) {
     const trimmedTitle = title.trim();
     const trimmedCategory = category.trim();
     if (!trimmedTitle || !trimmedCategory) {
-      Alert.alert('입력 확인', '버튼 이름과 카테고리를 입력해주세요.');
+      showAlert('입력 확인', '버튼 이름과 카테고리를 입력해주세요.');
       return;
     }
 
@@ -105,7 +106,8 @@ export function EditButtonScreen({ navigation, route }: Props) {
       navigation.goBack();
     } catch (error) {
       console.warn('[EditButtonScreen] 저장 실패:', error);
-      Alert.alert('저장 실패', '버튼을 저장하는 중 오류가 발생했습니다. 다시 시도해주세요.');
+      const detail = error instanceof Error ? error.message : String(error);
+      showAlert('저장 실패', `버튼을 저장하는 중 오류가 발생했습니다.\n\n${detail}`);
     } finally {
       setSaving(false);
     }
@@ -124,7 +126,8 @@ export function EditButtonScreen({ navigation, route }: Props) {
       navigation.goBack();
     } catch (error) {
       console.warn('[EditButtonScreen] 삭제 실패:', error);
-      Alert.alert('삭제 실패', '버튼을 삭제하는 중 오류가 발생했습니다. 다시 시도해주세요.');
+      const detail = error instanceof Error ? error.message : String(error);
+      showAlert('삭제 실패', `버튼을 삭제하는 중 오류가 발생했습니다.\n\n${detail}`);
     } finally {
       setDeleting(false);
     }

@@ -1,6 +1,6 @@
 ---
 name: deploy-troubleshooting
-description: Class BGM Pad 프로젝트의 GitHub push 권한 오류, Vercel 배포 시 Firebase 환경변수/Storage 버킷 오류, 웹앱에서 음원 업로드 시 CORS 오류, Firebase Storage 버킷이 존재하지 않는(Blaze 요금제 필요) 오류를 진단하고 해결하는 가이드. "git push"가 403/permission denied로 실패하거나, 배포한 웹앱 콘솔에 "Firebase 환경변수가 설정되지 않았습니다" / "storage/no-default-bucket" / "has been blocked by CORS policy" 에러가 뜨거나, gsutil이 "The specified bucket does not exist"를 낼 때 사용한다.
+description: Class BGM Pad 프로젝트의 GitHub push 권한 오류, Vercel 배포 시 Firebase 환경변수/Storage 버킷 오류, 웹앱에서 음원 업로드 시 CORS 오류, Firebase Storage 버킷이 존재하지 않는(Blaze 요금제 필요) 오류, 웹에서 저장/삭제 실패 시 아무 메시지도 안 뜨고 스피너가 멈추지 않는 문제를 진단하고 해결하는 가이드. "git push"가 403/permission denied로 실패하거나, 배포한 웹앱 콘솔에 "Firebase 환경변수가 설정되지 않았습니다" / "storage/no-default-bucket" / "has been blocked by CORS policy" 에러가 뜨거나, gsutil이 "The specified bucket does not exist"를 내거나, 웹에서 버튼 추가/수정/삭제가 조용히 실패(에러 문구 없이 로딩만 계속됨)할 때 사용한다.
 ---
 
 # Class BGM Pad 배포 문제 해결 가이드
@@ -184,6 +184,30 @@ Cloud Shell에서 `gsutil cors set ... gs://class-bgm-pad.firebasestorage.app`�
 
 ---
 
+## 문제 5: 웹에서 저장/삭제가 실패해도 에러 메시지가 하나도 안 뜨고 로딩만 계속됨
+
+### 증상
+버튼 추가 화면에서 업로드 진행률이 100%까지 간 뒤 "저장" 버튼이 계속 로딩 스피너 상태로 멈춰 있다. 브라우저 콘솔에도 별다른 알림창(팝업)이 뜨지 않는다. 이 상태에서 새로고침하면 방금 추가하려던 버튼이 목록에 없다(=애초에 저장이 끝난 적이 없다).
+
+### 원인
+`react-native-web`의 `Alert.alert()`는 **완전히 빈 구현**이다 (`class Alert { static alert() {} }`). 즉 네이티브에서는 잘 뜨는 `Alert.alert('저장 실패', ...)` 같은 코드가 **웹에서는 아무 일도 하지 않는다.** 코드 자체는 정상적으로 catch 블록까지 도달해서 `finally`로 로딩 상태를 풀어줘야 하는데, 만약 그 사이에 실제 에러가 나더라도 사용자는 그걸 볼 방법이 전혀 없어서 "그냥 멈춘 것처럼" 보인다. (업로드가 진짜로 응답 없이 멈추는 경우까지 겹치면 `finally`조차 실행되지 않아 스피너가 영원히 남는다.)
+
+### 해결 방법 (이미 이 프로젝트에 적용됨)
+1. `src/utils/alert.ts`의 `showAlert(title, message)` 헬퍼를 만들어, 웹에서는 `window.alert(...)`을 쓰고 네이티브에서는 `Alert.alert(...)`을 쓰도록 분기했다. 화면 코드에서 `Alert.alert(...)`을 직접 쓰지 않고 반드시 `showAlert(...)`를 쓴다.
+2. 버튼이 여러 개인 확인창(예: 캐시 비우기)은 `Alert.alert(title, message, [버튼들])` 대신, 이미 있는 `ConfirmModal` 컴포넌트(순수 React Native `Modal` 기반이라 웹에서도 정상 동작)를 재사용하도록 바꿨다.
+3. `storageService.ts`의 업로드 로직에 **60초 타임아웃**을 추가했다 — 그 시간 안에 업로드가 끝나지도 에러가 나지도 않으면 강제로 취소하고 명확한 에러 메시지로 실패시킨다. 원인이 무엇이든(CORS, 네트워크, SDK 내부 재시도 루프 등) 화면이 무한 로딩으로 남지 않게 하는 안전장치다.
+4. 저장/삭제 실패 시 `showAlert`에 **실제 에러 메시지(`error.message`)를 그대로 포함**시켜서, 다음에 비슷한 문제가 생기면 화면에서 바로 원인을 읽을 수 있게 했다.
+
+### 주의: 새 화면/기능을 추가할 때
+- 절대 `import { Alert } from 'react-native'`로 직접 `Alert.alert(...)`를 호출하지 않는다. 항상 `src/utils/alert.ts`의 `showAlert`를 쓴다.
+- 버튼이 여러 개 필요한 확인창은 `ConfirmModal` 패턴을 따른다.
+- 시간이 걸릴 수 있는 네트워크 작업(업로드/다운로드 등)에는 타임아웃을 걸어서, 실패해도 UI가 응답 없는 상태로 멈추지 않게 한다.
+
+### 이 프로젝트에서 실제 있었던 일
+버튼 추가 시 업로드가 100%에서 멈춘 채로 저장 버튼이 계속 로딩 상태였고, 새로고침하면 그 버튼이 사라졌다(=저장이 실제로 끝난 적이 없었다). 원인을 찾다가 `react-native-web`의 `Alert.alert`가 완전히 빈 함수라는 걸 확인 → 모든 화면의 `Alert.alert` 호출을 `showAlert` 헬퍼로 교체하고, 업로드에 60초 타임아웃을 추가하고, 캐시 비우기 확인창은 `ConfirmModal`로 교체해서 해결했다. 같은 김에 HomeScreen의 카드 수정 진입 방법도 길게 누르기(모바일 전용, 웹 마우스에선 불안정)만 있던 것을 연필 아이콘 버튼으로 보강했다.
+
+---
+
 ## 새로운 배포 문제를 진단할 때 공통 체크리스트
 
 1. 브라우저/터미널에 찍힌 **정확한 에러 메시지 전문**을 먼저 확인한다 (요약하지 말고 그대로).
@@ -192,3 +216,4 @@ Cloud Shell에서 `gsutil cors set ... gs://class-bgm-pad.firebasestorage.app`�
 4. GitHub push/권한 관련이면 읽기(`git ls-remote`)와 쓰기(`git push`)를 분리해서 어느 쪽이 막혔는지 먼저 구분한다.
 5. 콘솔에 "blocked by CORS policy"가 보이면 문제 2(환경변수)가 아니라 문제 3(버킷 CORS 설정)이다 — 둘을 헷갈리지 않는다.
 6. `gsutil`/`gcloud`가 "bucket does not exist"를 내면 CORS 설정(문제 3)보다 먼저 문제 4(Storage가 아예 초기화 안 됨/Blaze 요금제 필요)를 의심하고, Firebase 콘솔 Storage 화면을 직접 확인한다.
+7. **웹에서** 뭔가 저장/삭제가 "그냥 멈춘 것처럼" 보이고 에러 팝업이 안 뜨면, 진짜 아무 문제가 없는 게 아니라 문제 5(`Alert.alert`가 웹에서 무음)일 가능성이 크다 — 코드에 `Alert.alert`가 새로 추가되지 않았는지부터 확인한다.

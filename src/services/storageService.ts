@@ -10,6 +10,9 @@ import {
 import { storage } from '../config/firebaseConfig';
 
 const AUDIO_FOLDER = 'bgm-audio';
+// 네트워크나 CORS 문제로 업로드가 끝나지도, 에러를 던지지도 않고 그냥 멈춰버리는 경우를 대비한 안전장치.
+// 이 시간이 지나면 업로드를 취소하고 명확한 에러로 실패시켜서, 화면이 무한 로딩 상태로 남지 않게 한다.
+const UPLOAD_TIMEOUT_MS = 60_000;
 
 export interface UploadResult {
   audioUrl: string;
@@ -39,6 +42,15 @@ export async function uploadAudioFile(
   const uploadTask = uploadBytesResumable(storageRef, blob);
 
   await new Promise<void>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      uploadTask.cancel();
+      reject(
+        new Error(
+          `업로드가 ${UPLOAD_TIMEOUT_MS / 1000}초 안에 끝나지 않았습니다. 네트워크 상태나 Storage CORS 설정을 확인하고 다시 시도해주세요.`
+        )
+      );
+    }, UPLOAD_TIMEOUT_MS);
+
     uploadTask.on(
       'state_changed',
       (snapshot: UploadTaskSnapshot) => {
@@ -46,8 +58,14 @@ export async function uploadAudioFile(
           onProgress(snapshot.bytesTransferred / snapshot.totalBytes);
         }
       },
-      reject,
-      () => resolve()
+      (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      },
+      () => {
+        clearTimeout(timeoutId);
+        resolve();
+      }
     );
   });
 

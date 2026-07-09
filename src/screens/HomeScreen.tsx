@@ -1,6 +1,6 @@
 // BGM 버튼 목록 화면 (앱의 메인 화면).
 // - Firestore에서 실시간으로 버튼 목록을 불러와 카드 그리드로 보여준다.
-// - 카드를 누르면 재생, 길게 누르면 수정 화면으로 이동한다.
+// - 카드를 누르면 재생, 길게 누르거나 연필 아이콘을 누르면 수정 화면으로 이동한다.
 // - 카테고리 필터, 재생 중 표시(PlayerBar), 전체 정지 버튼, 버튼 추가 FAB을 포함한다.
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useMemo, useState } from 'react';
@@ -79,7 +79,7 @@ export function HomeScreen({ navigation }: Props) {
               isActive={button.id === activeButtonId}
               isPlaying={button.id === activeButtonId && isPlaying}
               onPress={() => play(button)}
-              onLongPress={() => navigation.navigate('EditButton', { button })}
+              onEdit={() => navigation.navigate('EditButton', { button })}
             />
           ))}
         </ScrollView>

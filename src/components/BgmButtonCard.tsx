@@ -1,7 +1,8 @@
 // 수업 중 빠르게 누를 수 있도록 크고 명확하게 디자인된 BGM 버튼 카드.
-// 짧게 누르면 재생, 길게 누르면 수정 화면으로 이동한다.
+// 짧게 누르면 재생. 수정 화면 진입은 길게 누르기(모바일)와 연필 아이콘(모든 환경, 특히 마우스만
+// 쓰는 웹에서 길게 누르기가 잘 안 먹는 경우를 위한 대체 진입점) 둘 다로 가능하다.
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { GestureResponderEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import { theme } from '../constants/theme';
 import { BgmButton } from '../types';
 
@@ -10,14 +11,19 @@ interface Props {
   isActive: boolean; // 현재 이 버튼의 음원이 재생 큐에 로드되어 있는지
   isPlaying: boolean; // 그 중에서도 실제로 소리가 나오고 있는지
   onPress: () => void;
-  onLongPress: () => void;
+  onEdit: () => void;
 }
 
-export function BgmButtonCard({ button, isActive, isPlaying, onPress, onLongPress }: Props) {
+export function BgmButtonCard({ button, isActive, isPlaying, onPress, onEdit }: Props) {
+  function handleEditPress(event: GestureResponderEvent) {
+    event.stopPropagation?.();
+    onEdit();
+  }
+
   return (
     <Pressable
       onPress={onPress}
-      onLongPress={onLongPress}
+      onLongPress={onEdit}
       style={({ pressed }) => [
         styles.card,
         { backgroundColor: button.color },
@@ -25,6 +31,10 @@ export function BgmButtonCard({ button, isActive, isPlaying, onPress, onLongPres
         pressed && styles.pressed,
       ]}
     >
+      <Pressable onPress={handleEditPress} hitSlop={8} style={styles.editButton}>
+        <Text style={styles.editButtonLabel}>✏️</Text>
+      </Pressable>
+
       {isActive && (
         <View style={styles.statusBadge}>
           <Text style={styles.statusText}>{isPlaying ? '재생 중' : '일시정지'}</Text>
@@ -60,6 +70,21 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.85,
+  },
+  editButton: {
+    position: 'absolute',
+    top: theme.spacing(1.5),
+    left: theme.spacing(1.5),
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    zIndex: 1,
+  },
+  editButtonLabel: {
+    fontSize: 14,
   },
   statusBadge: {
     position: 'absolute',
