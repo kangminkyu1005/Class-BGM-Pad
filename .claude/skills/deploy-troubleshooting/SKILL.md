@@ -323,6 +323,36 @@ Firestore의 기본 전송(WebChannel 스트리밍)은 일부 프록시/보안 �
 ### 교훈
 "읽기는 되는데 쓰기만 조용히 멈춘다"면 SDK 설정을 계속 만지는 것보다, **같은 네트워크에서 확실히 통과되는 방식(단순 fetch)이 무엇인지 확인하고 그 방식으로 우회**하는 것이 빠르다. Storage 업로드 성공이 그 증거 역할을 했다.
 
+### 반전: REST 전환이 밝혀낸 진짜 근본 원인 (문제 10 참고)
+REST로 전환하자마자 지금까지 SDK가 조용히 삼키던 에러가 그대로 드러났다: **HTTP 403 "Cloud Firestore API has not been used in project ... or it is disabled"** — 즉 프록시/네트워크 문제가 아니라 **Firestore 데이터베이스가 애초에 생성되지 않았던 것**이 무한 로딩의 진짜 원인이었다. (문제 8의 프록시/WebChannel 가설은 결과적으로 틀렸다. 다만 REST 전환 자체는 에러를 드러내는 결정적 진단 도구가 됐고, 명확한 HTTP 에러를 보여주므로 그대로 유지한다.)
+
+---
+
+## 문제 10: Firestore 쓰기 403 — "Cloud Firestore API has not been used in project ... or it is disabled" (진짜 근본 원인)
+
+### 증상
+REST 쓰기(문제 9) 도입 후, 저장 시 alert에 다음이 표시됨:
+```
+Firestore 저장 실패 (HTTP 403): { "error": { "code": 403,
+  "message": "Cloud Firestore API has not been used in project <프로젝트ID> before or it is disabled.
+  Enable it by visiting https://console.developers.google.com/apis/api/firestore.googleapis.com/... then retry." } }
+```
+
+### 원인
+**Firebase 프로젝트에 Firestore 데이터베이스를 아예 만들지 않았다.** Storage만 초기화하고 Firestore Database 생성 단계(README 2-1의 2번)를 건너뛴 경우다. 이 상태에서:
+- Firestore SDK는 이 에러를 화면에 드러내지 않고 **내부적으로 무한 재시도**하므로, 증상이 "무한 로딩"으로만 보인다 (문제 5~9를 거치며 헤맨 이유).
+- 저장 직후 목록에 버튼이 잠깐 보이는 것은 SDK의 낙관적 로컬 반영일 뿐, 서버에는 아무것도 저장되지 않아 새로고침하면 사라진다.
+- Storage 업로드는 별개 API라 정상 동작한다 → "파일은 올라가는데 버튼은 저장 안 됨"의 진짜 이유.
+
+### 해결 방법
+1. Firebase 콘솔 → 해당 프로젝트 → **Firestore Database** → **"데이터베이스 만들기"** (위치: `asia-northeast3` 등) → 테스트 모드로 시작.
+2. 생성 후 **규칙** 탭에서 README 2-4의 규칙(`bgmButtons`에 read/write 허용)으로 교체하고 게시.
+3. 1~2분 후 재시도. **앱 재배포는 필요 없다** (서버 쪽 설정이므로).
+
+### 교훈 (이번 사건 전체의 핵심)
+- SDK가 에러를 숨기고 무한 재시도하는 경우, **REST API로 같은 작업을 한 번 직접 호출해보면 숨은 에러가 HTTP 응답으로 그대로 드러난다.** 이번에 무한 로딩의 진짜 원인을 찾은 결정적 방법이었다.
+- "Firebase 연동이 반쯤 동작한다"(Storage는 되는데 Firestore는 안 됨)면 코드보다 먼저 **Firebase 콘솔에서 각 제품(Firestore/Storage)이 실제로 초기화되어 있는지**를 확인한다. 문제 4(Storage 미초기화)와 문제 10(Firestore 미생성)은 정확히 같은 패턴의 짝이다.
+
 ---
 
 ## 새로운 배포 문제를 진단할 때 공통 체크리스트
@@ -336,4 +366,5 @@ Firestore의 기본 전송(WebChannel 스트리밍)은 일부 프록시/보안 �
 7. **웹에서** 뭔가 저장/삭제가 "그냥 멈춘 것처럼" 보이고 에러 팝업이 안 뜨면, 진짜 아무 문제가 없는 게 아니라 문제 5(`Alert.alert`가 웹에서 무음)일 가능성이 크다 — 코드에 `Alert.alert`가 새로 추가되지 않았는지부터 확인한다.
 8. **재배포했는데 화면이 그대로**면, 먼저 Vercel Deployments에서 배포된 커밋 해시가 최신인지 확인한다. 커밋은 맞는데 화면이 그대로면 코드 문제가 아니라 문제 6(캐싱)이다 — 하드 리프레시/시크릿 창으로 먼저 확인하고, `vercel.json`의 `headers` 캐시 설정을 점검한다.
 9. **업로드가 웹에서 100%에서 안 끝나면**, 타임아웃 에러 알림이 뜨는지 먼저 기다려보고, Firebase 콘솔에서 파일이 실제로 올라갔는지 확인한다. 파일은 올라갔는데 화면만 멈춰있다면 문제 3(CORS 미설정)이 아니라 문제 7(resumable 업로드의 CORS 헤더 노출 문제)이다 — 버킷 CORS를 아무리 고쳐도 소용없고, `uploadBytes`로 바꿔야 한다.
-10. 화면 단계 표시가 **"버튼 정보 저장 중..."에서 타임아웃**되면 Firestore 쓰기 문제다(문제 8→9). SDK 설정(롱폴링 등)으로 안 풀리면 웹 쓰기는 이미 REST API로 전환되어 있으니(firestoreService.web.ts), 에러 알림에 표시되는 HTTP 상태코드를 읽는다 — 403이면 보안 규칙, 타임아웃이면 네트워크가 firestore.googleapis.com 자체를 차단하는 것.
+10. 화면 단계 표시가 **"버튼 정보 저장 중..."에서 타임아웃/실패**하면 Firestore 쓰기 문제다(문제 8→9→10). 웹 쓰기는 REST API로 되어 있으니(firestoreService.web.ts) 에러 알림의 HTTP 상태코드를 읽는다 — **403 + "API has not been used/disabled"면 Firestore DB 미생성(문제 10)**, 403 + permission이면 보안 규칙, 타임아웃이면 네트워크가 firestore.googleapis.com 자체를 차단하는 것.
+11. Firebase 연동이 "반만" 동작하면(Storage OK, Firestore 무한 로딩 등) 코드 디버깅 전에 **Firebase 콘솔에서 Firestore Database와 Storage가 둘 다 실제로 생성/초기화되어 있는지**부터 확인한다 (문제 4, 문제 10).
