@@ -1,6 +1,6 @@
 ---
 name: deploy-troubleshooting
-description: Class BGM Pad 프로젝트의 GitHub push 권한 오류, Vercel 배포 시 Firebase 환경변수/Storage 버킷 오류, 웹앱에서 음원 업로드 시 CORS 오류, Firebase Storage 버킷이 존재하지 않는(Blaze 요금제 필요) 오류, 웹에서 저장/삭제 실패 시 아무 메시지도 안 뜨고 스피너가 멈추지 않는 문제를 진단하고 해결하는 가이드. "git push"가 403/permission denied로 실패하거나, 배포한 웹앱 콘솔에 "Firebase 환경변수가 설정되지 않았습니다" / "storage/no-default-bucket" / "has been blocked by CORS policy" 에러가 뜨거나, gsutil이 "The specified bucket does not exist"를 내거나, 웹에서 버튼 추가/수정/삭제가 조용히 실패(에러 문구 없이 로딩만 계속됨)할 때 사용한다.
+description: Class BGM Pad 프로젝트의 GitHub push 권한 오류, Vercel 배포 시 Firebase 환경변수/Storage 버킷 오류, 웹앱에서 음원 업로드 시 CORS 오류, Firebase Storage 버킷이 존재하지 않는(Blaze 요금제 필요) 오류, 웹에서 저장/삭제 실패 시 아무 메시지도 안 뜨고 스피너가 멈추지 않는 문제, 재배포했는데도 브라우저에 예전 화면이 그대로 보이는(캐시) 문제를 진단하고 해결하는 가이드. "git push"가 403/permission denied로 실패하거나, 배포한 웹앱 콘솔에 "Firebase 환경변수가 설정되지 않았습니다" / "storage/no-default-bucket" / "has been blocked by CORS policy" 에러가 뜨거나, gsutil이 "The specified bucket does not exist"를 내거나, 웹에서 버튼 추가/수정/삭제가 조용히 실패(에러 문구 없이 로딩만 계속됨)하거나, 최신 커밋을 배포했는데도 변경사항이 반영 안 될 때 사용한다.
 ---
 
 # Class BGM Pad 배포 문제 해결 가이드
@@ -208,6 +208,40 @@ Cloud Shell에서 `gsutil cors set ... gs://class-bgm-pad.firebasestorage.app`�
 
 ---
 
+## 문제 6: 코드를 고쳐서 재배포했는데 브라우저에는 예전 화면 그대로 보임
+
+### 증상
+Vercel Deployments에서 최신 커밋(해시 일치)이 배포된 걸 확인했는데도, 실제 배포된 링크를 열면 고친 내용이 하나도 안 보이고 예전 동작(예: 예전 UI, 고쳤던 버그가 그대로 재현)이 그대로 나온다.
+
+### 원인
+`vercel.json`에 캐시 관련 `headers` 설정이 없으면, Vercel이 정적 파일(특히 `index.html`)을 브라우저/엣지에 필요 이상으로 오래 캐시할 수 있다. Expo 웹 빌드는 실제 JS 번들 파일명에 콘텐츠 해시가 붙어 매번 바뀌지만(`index-<hash>.js`), 그 파일을 가리키는 `index.html` 자체가 캐시되어 버리면 브라우저는 새 배포가 있어도 계속 예전 `index.html`(→ 예전 JS 파일)을 불러온다.
+
+### 해결 방법
+1. `vercel.json`에 `headers` 규칙을 추가해 `index.html`(그리고 라우팅되는 모든 경로)은 항상 새로 받아오게 하고, 해시가 붙은 정적 자산(`/_expo/static/...`)만 장기 캐시하도록 분리한다:
+   ```json
+   {
+     "headers": [
+       {
+         "source": "/(.*)",
+         "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+       },
+       {
+         "source": "/_expo/static/(.*)",
+         "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+       }
+     ]
+   }
+   ```
+   (뒤에 오는 더 구체적인 규칙이 같은 헤더 키를 덮어쓰므로, 해시 붙은 자산만 예외적으로 장기 캐시된다.)
+2. 이 설정을 넣은 뒤 다시 배포한다.
+3. 그래도 예전 화면이 보이면, 코드/배포 문제가 아니라 **브라우저가 이미 캐시해둔 예전 파일**을 보고 있는 것이다. 하드 리프레시(Ctrl+Shift+R / Cmd+Shift+R)를 하거나 시크릿 창으로 열어서 확인한다.
+4. Deployments 탭에서 그 커밋 배포가 정말 **현재 접속 중인 도메인(Production)에 연결**되어 있는지도 확인한다 — Preview 배포와 Production 배포는 URL이 다르다.
+
+### 이 프로젝트에서 실제 있었던 일
+문제 5(Alert.alert 등)를 고쳐서 배포했는데, Vercel Deployments에서 해당 커밋(`c5a6353`)이 정확히 배포된 걸 확인했음에도 사용자 화면에는 수정 전 동작이 그대로 보였다. `vercel.json`에 캐시 헤더 설정이 없었던 것을 원인으로 보고 위 `headers` 규칙을 추가했다.
+
+---
+
 ## 새로운 배포 문제를 진단할 때 공통 체크리스트
 
 1. 브라우저/터미널에 찍힌 **정확한 에러 메시지 전문**을 먼저 확인한다 (요약하지 말고 그대로).
@@ -217,3 +251,4 @@ Cloud Shell에서 `gsutil cors set ... gs://class-bgm-pad.firebasestorage.app`�
 5. 콘솔에 "blocked by CORS policy"가 보이면 문제 2(환경변수)가 아니라 문제 3(버킷 CORS 설정)이다 — 둘을 헷갈리지 않는다.
 6. `gsutil`/`gcloud`가 "bucket does not exist"를 내면 CORS 설정(문제 3)보다 먼저 문제 4(Storage가 아예 초기화 안 됨/Blaze 요금제 필요)를 의심하고, Firebase 콘솔 Storage 화면을 직접 확인한다.
 7. **웹에서** 뭔가 저장/삭제가 "그냥 멈춘 것처럼" 보이고 에러 팝업이 안 뜨면, 진짜 아무 문제가 없는 게 아니라 문제 5(`Alert.alert`가 웹에서 무음)일 가능성이 크다 — 코드에 `Alert.alert`가 새로 추가되지 않았는지부터 확인한다.
+8. **재배포했는데 화면이 그대로**면, 먼저 Vercel Deployments에서 배포된 커밋 해시가 최신인지 확인한다. 커밋은 맞는데 화면이 그대로면 코드 문제가 아니라 문제 6(캐싱)이다 — 하드 리프레시/시크릿 창으로 먼저 확인하고, `vercel.json`의 `headers` 캐시 설정을 점검한다.
