@@ -14,8 +14,23 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebaseConfig';
 import { BgmButton, BgmButtonInput } from '../types';
+import { withTimeout } from '../utils/withTimeout';
 
 const COLLECTION_NAME = 'bgmButtons';
+
+// Firestore 쓰기는 서버가 확인해줄 때까지 promise가 완료되지 않는다. 네트워크가 쓰기 스트림만
+// 막는 환경(프록시/확장 프로그램)에서는 에러도 없이 영영 대기 상태가 되므로, 시간 제한을 걸어
+// 사용자에게 명확한 원인 문구를 보여준다.
+const WRITE_TIMEOUT_MS = 20_000;
+
+function writeTimeoutMessage(action: string): string {
+  return (
+    `${action}이(가) ${WRITE_TIMEOUT_MS / 1000}초 안에 서버에 저장되지 않았습니다. ` +
+    '광고 차단 확장 프로그램이나 네트워크(프록시/방화벽)가 Firestore 연결을 막고 있을 수 있습니다. ' +
+    '시크릿 창이나 다른 네트워크(휴대폰 데이터 등)에서 다시 시도해보세요. ' +
+    '(저장이 뒤늦게 완료될 수도 있으니, 재시도 전에 목록을 새로고침해 중복 등록을 확인하세요)'
+  );
+}
 
 function toMillis(value: Timestamp | number | undefined): number {
   if (!value) return Date.now();
@@ -60,18 +75,22 @@ export interface CreateButtonParams extends BgmButtonInput {
 }
 
 export async function createButton(params: CreateButtonParams): Promise<string> {
-  const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-    title: params.title,
-    category: params.category,
-    audioUrl: params.audioUrl,
-    storagePath: params.storagePath,
-    loop: params.loop,
-    volume: params.volume,
-    color: params.color,
-    icon: params.icon,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  const docRef = await withTimeout(
+    addDoc(collection(db, COLLECTION_NAME), {
+      title: params.title,
+      category: params.category,
+      audioUrl: params.audioUrl,
+      storagePath: params.storagePath,
+      loop: params.loop,
+      volume: params.volume,
+      color: params.color,
+      icon: params.icon,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }),
+    WRITE_TIMEOUT_MS,
+    writeTimeoutMessage('버튼 정보 저장')
+  );
   return docRef.id;
 }
 
@@ -81,12 +100,20 @@ export interface UpdateButtonParams extends Partial<BgmButtonInput> {
 }
 
 export async function updateButton(id: string, params: UpdateButtonParams): Promise<void> {
-  await updateDoc(doc(db, COLLECTION_NAME, id), {
-    ...params,
-    updatedAt: serverTimestamp(),
-  });
+  await withTimeout(
+    updateDoc(doc(db, COLLECTION_NAME, id), {
+      ...params,
+      updatedAt: serverTimestamp(),
+    }),
+    WRITE_TIMEOUT_MS,
+    writeTimeoutMessage('버튼 정보 수정')
+  );
 }
 
 export async function deleteButtonDoc(id: string): Promise<void> {
-  await deleteDoc(doc(db, COLLECTION_NAME, id));
+  await withTimeout(
+    deleteDoc(doc(db, COLLECTION_NAME, id)),
+    WRITE_TIMEOUT_MS,
+    writeTimeoutMessage('버튼 삭제')
+  );
 }

@@ -30,17 +30,22 @@ function sanitizeFileName(name: string): string {
  * @param localUri  expo-document-picker가 반환한 로컬 파일 uri
  * @param fileName  원본 파일 이름 (확장자 포함)
  * @param onProgress 0~1 사이의 업로드 진행률 콜백 (선택)
+ * @param onStep 현재 진행 중인 단계를 화면에 표시하기 위한 콜백 (선택) - 어느 단계에서 멈추는지 진단에도 쓰인다
  */
 export async function uploadAudioFile(
   localUri: string,
   fileName: string,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  onStep?: (step: string) => void
 ): Promise<UploadResult> {
+  onStep?.('음원 파일 읽는 중...');
   const response = await fetch(localUri);
   const blob = await response.blob();
 
   const storagePath = `${AUDIO_FOLDER}/${Date.now()}-${sanitizeFileName(fileName)}`;
   const storageRef = ref(storage, storagePath);
+
+  onStep?.('음원 업로드 중...');
   const uploadTask = uploadBytesResumable(storageRef, blob);
 
   await new Promise<void>((resolve, reject) => {
@@ -71,6 +76,7 @@ export async function uploadAudioFile(
     );
   });
 
+  onStep?.('다운로드 주소 확인 중...');
   const audioUrl = await getDownloadURL(storageRef);
   return { audioUrl, storagePath };
 }

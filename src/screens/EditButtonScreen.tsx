@@ -40,6 +40,8 @@ export function EditButtonScreen({ navigation, route }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
+  // 저장이 어느 단계까지 진행됐는지 화면에 그대로 보여준다 (문제가 생겼을 때 어디서 멈췄는지 바로 알 수 있게).
+  const [saveStep, setSaveStep] = useState('');
 
   async function handlePickReplacementFile() {
     const result = await DocumentPicker.getDocumentAsync({
@@ -69,6 +71,7 @@ export function EditButtonScreen({ navigation, route }: Props) {
 
     setSaving(true);
     setUploadProgress(0);
+    setSaveStep('준비 중...');
     try {
       let audioUrl: string | undefined;
       let storagePath: string | undefined;
@@ -77,12 +80,14 @@ export function EditButtonScreen({ navigation, route }: Props) {
         const uploaded = await uploadAudioFile(
           replacementFile.uri,
           replacementFile.name,
-          setUploadProgress
+          setUploadProgress,
+          setSaveStep
         );
         audioUrl = uploaded.audioUrl;
         storagePath = uploaded.storagePath;
       }
 
+      setSaveStep('버튼 정보 저장 중...');
       await updateButton(button.id, {
         title: trimmedTitle,
         category: trimmedCategory,
@@ -182,8 +187,13 @@ export function EditButtonScreen({ navigation, route }: Props) {
           <VolumeSlider value={volume} onChange={setVolume} />
         </Field>
 
-        {saving && replacementFile && (
-          <Text style={styles.progressText}>업로드 중... {Math.round(uploadProgress * 100)}%</Text>
+        {saving && (
+          <Text style={styles.progressText}>
+            {saveStep}
+            {uploadProgress > 0 && uploadProgress < 1
+              ? ` (${Math.round(uploadProgress * 100)}%)`
+              : ''}
+          </Text>
         )}
 
         <PrimaryButton label="저장" onPress={handleSave} loading={saving} disabled={busy} />

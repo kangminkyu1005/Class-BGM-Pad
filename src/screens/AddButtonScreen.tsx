@@ -31,6 +31,8 @@ export function AddButtonScreen({ navigation }: Props) {
   const [pickedFile, setPickedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [saving, setSaving] = useState(false);
+  // 저장이 어느 단계까지 진행됐는지 화면에 그대로 보여준다 (문제가 생겼을 때 어디서 멈췄는지 바로 알 수 있게).
+  const [saveStep, setSaveStep] = useState('');
 
   useEffect(() => {
     getSettings().then((settings) => {
@@ -76,12 +78,15 @@ export function AddButtonScreen({ navigation }: Props) {
 
     setSaving(true);
     setUploadProgress(0);
+    setSaveStep('준비 중...');
     try {
       const { audioUrl, storagePath } = await uploadAudioFile(
         pickedFile.uri,
         pickedFile.name,
-        setUploadProgress
+        setUploadProgress,
+        setSaveStep
       );
+      setSaveStep('버튼 정보 저장 중...');
       await createButton({
         title: trimmedTitle,
         category: trimmedCategory,
@@ -163,7 +168,12 @@ export function AddButtonScreen({ navigation }: Props) {
         </Field>
 
         {saving && (
-          <Text style={styles.progressText}>업로드 중... {Math.round(uploadProgress * 100)}%</Text>
+          <Text style={styles.progressText}>
+            {saveStep}
+            {uploadProgress > 0 && uploadProgress < 1
+              ? ` (${Math.round(uploadProgress * 100)}%)`
+              : ''}
+          </Text>
         )}
 
         <PrimaryButton label="저장" onPress={handleSave} loading={saving} />
