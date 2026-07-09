@@ -163,16 +163,39 @@ npm run build:web      # 정적 파일 빌드 → dist/ 폴더 생성 (expo expo
 - **iOS Safari**: 화면이 잠기거나 다른 앱으로 전환하면 오디오 재생이 끊길 수 있습니다. 브라우저 탭 자체가 백그라운드에서 정지되는 iOS의 정책 때문이며, 웹 표준만으로는 완전히 우회할 수 없습니다.
 - **Android Chrome**: Media Session API 덕분에 잠금화면/알림에 재생 정보와 재생·일시정지·정지 컨트롤이 뜨고, 화면이 꺼져도 비교적 안정적으로 재생됩니다.
 - 정말 "휴대폰이 잠겨 있어도 100% 끊김 없이 재생"이 중요하다면, 네이티브 앱(3번 항목, 또는 EAS Build로 만든 설치 파일) 사용을 권장합니다.
-- Firebase Storage에서 오디오를 `fetch`로 캐싱할 때 브라우저 CORS 정책이 걸릴 수 있습니다. 만약 캐싱이 계속 실패한다면(콘솔에 CORS 에러가 보이면), Storage 버킷에 CORS 설정을 추가하세요.
+- **웹앱에서 음원 업로드/캐싱이 CORS 에러로 실패할 수 있습니다.** 브라우저 콘솔에 `has been blocked by CORS policy` / `Response to preflight request doesn't pass access control check` 같은 메시지가 보이면, Firebase Storage 버킷에 CORS 설정이 아직 없는 것입니다. **웹앱을 쓰는 이상 이 설정은 필수입니다** (건너뛰면 버튼 추가 시 파일 업로드가 항상 실패합니다).
 
-  ```json
-  // cors.json
-  [{ "origin": ["*"], "method": ["GET"], "maxAgeSeconds": 3600 }]
-  ```
-
-  ```bash
-  gsutil cors set cors.json gs://your-project.appspot.com
-  ```
+  1. 아래 내용으로 `cors.json` 파일을 만듭니다. (업로드는 POST/PUT, 재생·캐싱은 GET을 쓰므로 여러 메서드를 허용해야 합니다.)
+     ```json
+     [
+       {
+         "origin": ["*"],
+         "method": ["GET", "HEAD", "PUT", "POST", "DELETE"],
+         "responseHeader": [
+           "Content-Type",
+           "Content-Length",
+           "x-goog-resumable",
+           "X-Goog-Upload-Protocol",
+           "X-Goog-Upload-Command",
+           "X-Goog-Upload-Status",
+           "X-Goog-Upload-URL",
+           "X-Goog-Upload-Offset",
+           "X-Goog-Upload-Header-Content-Length",
+           "X-Goog-Upload-Header-Content-Type"
+         ],
+         "maxAgeSeconds": 3600
+       }
+     ]
+     ```
+  2. 이 설정을 적용하려면 `gsutil` 명령이 필요합니다. 로컬에 Google Cloud SDK를 설치하지 않았다면, **Google Cloud Console의 Cloud Shell**(브라우저에서 바로 되는 터미널, 설치 불필요)을 쓰는 게 가장 쉽습니다.
+     - https://console.cloud.google.com 접속 → 상단에서 Firebase와 같은 프로젝트 선택 → 우측 상단 `Cloud Shell 활성화(>_)` 아이콘 클릭
+     - Cloud Shell에서 위 `cors.json` 내용을 붙여넣어 파일로 저장 (`nano cors.json` 등으로 편집)
+     - 아래 명령 실행 (버킷 이름은 `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` 값과 동일):
+       ```bash
+       gsutil cors set cors.json gs://your-project.firebasestorage.app
+       ```
+     - 확인: `gsutil cors get gs://your-project.firebasestorage.app`
+  3. 별도의 배포/재시작 없이 즉시 적용됩니다. 브라우저에서 새로고침 후 다시 시도하세요.
 
 ---
 
