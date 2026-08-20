@@ -20,15 +20,11 @@ test("does not eagerly download every audio file", () => {
   assert.match(page, /preload = "metadata"/);
 });
 
-test("requires an approved administrator for content changes", () => {
-  assert.match(page, /playwell_site_admins/);
-  assert.match(page, /signInWithOAuth/);
-  assert.match(page, /if \(!isAdmin\)/);
-});
-
-test("makes administrator status and local logout visible", () => {
-  assert.match(page, /관리자 모드/);
-  assert.match(page, /관리자 로그아웃/);
-  assert.match(page, /signOut\(\{ scope: "local" \}\)/);
-  assert.match(page, /onAuthStateChange[\s\S]*setButtons\(\[\]\)/);
+test("allows content management without administrator authentication", () => {
+  assert.doesNotMatch(page, /playwell_site_admins/);
+  assert.doesNotMatch(page, /signInWithOAuth/);
+  assert.doesNotMatch(page, /isAdmin/);
+  assert.match(page, /새 버튼 추가/);
+  assert.match(page, /onClick=\{\(\) => openEdit\(button\)\}/);
+  assert.match(page, /\.delete\(\)/);
 });

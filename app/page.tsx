@@ -22,7 +22,6 @@ import {
   Hand,
   Headphones,
   ListMusic,
-  LogOut,
   Megaphone,
   Moon,
   Music,
@@ -35,7 +34,6 @@ import {
   Repeat2,
   Search,
   Settings,
-  ShieldCheck,
   SkipBack,
   SkipForward,
   Square,
@@ -251,9 +249,6 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [saveStep, setSaveStep] = useState("");
   const [toast, setToast] = useState("");
-  const [authReady, setAuthReady] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminEmail, setAdminEmail] = useState("");
   const [defaultLoop, setDefaultLoop] = useState(
     () => getSavedSettings().defaultLoop,
   );
@@ -296,29 +291,6 @@ export default function Home() {
     setLoading(false);
   }, []);
 
-  const refreshAdmin = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setIsAdmin(false);
-      setAdminEmail("");
-      setAuthReady(true);
-      return;
-    }
-
-    const { data } = await supabase
-      .from("playwell_site_admins")
-      .select("user_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    setIsAdmin(Boolean(data));
-    setAdminEmail(user.email ?? "");
-    setAuthReady(true);
-  }, []);
-
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void loadButtons(), 0);
 
@@ -336,21 +308,6 @@ export default function Home() {
       void supabase.removeChannel(channel);
     };
   }, [loadButtons]);
-
-  useEffect(() => {
-    const initialAuthCheck = window.setTimeout(() => void refreshAdmin(), 0);
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      setButtons([]);
-      void refreshAdmin();
-      void loadButtons();
-    });
-    return () => {
-      window.clearTimeout(initialAuthCheck);
-      subscription.unsubscribe();
-    };
-  }, [loadButtons, refreshAdmin]);
 
   useEffect(() => {
     const fallbackAudio = new Audio();
@@ -701,10 +658,6 @@ export default function Home() {
 
   async function saveButton(event: FormEvent) {
     event.preventDefault();
-    if (!isAdmin) {
-      showToast("관리자 로그인 후 수정할 수 있습니다.");
-      return;
-    }
     const title = draft.title.trim();
     const nextCategory = draft.category.trim();
     if (!title || !nextCategory) {
@@ -785,10 +738,6 @@ export default function Home() {
 
   async function removeButton() {
     if (!editing) return;
-    if (!isAdmin) {
-      showToast("관리자 로그인 후 삭제할 수 있습니다.");
-      return;
-    }
     if (!window.confirm(`"${editing.title}" 버튼과 음원을 삭제할까요?`)) return;
     setSaving(true);
     try {
@@ -821,26 +770,6 @@ export default function Home() {
     }
   }
 
-  async function signInAdmin() {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin },
-    });
-    if (error) showToast(`로그인을 시작하지 못했습니다. ${error.message}`);
-  }
-
-  async function signOutAdmin() {
-    const { error } = await supabase.auth.signOut({ scope: "local" });
-    if (error) {
-      showToast(`로그아웃하지 못했습니다. ${error.message}`);
-      return;
-    }
-    setIsAdmin(false);
-    setAdminEmail("");
-    setPanel("none");
-    showToast("관리자 로그아웃을 완료했습니다.");
-  }
-
   function saveSettings() {
     window.localStorage.setItem(
       "playwell-bgm-settings",
@@ -865,28 +794,6 @@ export default function Home() {
           </div>
         </div>
         <div className="header-actions">
-          {authReady && adminEmail && (
-            <>
-              <span
-                className={`admin-mode-badge ${isAdmin ? "" : "is-denied"}`}
-                role="status"
-                title={adminEmail}
-              >
-                <ShieldCheck aria-hidden="true" size={16} />
-                {isAdmin ? "관리자 모드" : "관리 권한 없음"}
-              </span>
-              <button
-                className="header-logout"
-                type="button"
-                onClick={() => void signOutAdmin()}
-                aria-label="관리자 로그아웃"
-                title="로그아웃"
-              >
-                <LogOut aria-hidden="true" size={18} />
-                <span>로그아웃</span>
-              </button>
-            </>
-          )}
           <button
             className="icon-control"
             type="button"
@@ -946,7 +853,7 @@ export default function Home() {
             </p>
             <h2>{workspaceView === "pad" ? "효과음 버튼" : "배경음 재생목록"}</h2>
           </div>
-          {workspaceView === "pad" && isAdmin ? (
+          {workspaceView === "pad" ? (
             <button className="primary-button" type="button" onClick={openAdd}>
               <Plus aria-hidden="true" size={19} /> 새 버튼 추가
             </button>
@@ -1083,18 +990,16 @@ export default function Home() {
                           )}
                         </span>
                       </button>
-                      {isAdmin && (
-                        <button
-                          className="edit-button"
-                          type="button"
-                          onClick={() => openEdit(button)}
-                          aria-label={`${button.title} 수정`}
-                          title={`${button.title} 수정`}
-                        >
-                          <Pencil aria-hidden="true" size={18} />
-                          <span className="visually-hidden">편집</span>
-                        </button>
-                      )}
+                      <button
+                        className="edit-button"
+                        type="button"
+                        onClick={() => openEdit(button)}
+                        aria-label={`${button.title} 수정`}
+                        title={`${button.title} 수정`}
+                      >
+                        <Pencil aria-hidden="true" size={18} />
+                        <span className="visually-hidden">편집</span>
+                      </button>
                     </article>
                   );
                 })}
@@ -1388,7 +1293,7 @@ export default function Home() {
               <div className="modal-head">
                 <div>
                   <p className="eyebrow">APP SETTINGS</p>
-                  <h2>설정 및 관리자</h2>
+                  <h2>기본 설정</h2>
                 </div>
                 <button
                   className="close-button"
@@ -1424,39 +1329,6 @@ export default function Home() {
                     onChange={(event) => setDefaultVolume(Number(event.target.value))}
                   />
                 </label>
-              </div>
-              <div className="admin-access">
-                <div className="admin-access-copy">
-                  <p className="eyebrow">ADMIN ACCESS</p>
-                  <strong>콘텐츠 관리</strong>
-                  {!authReady ? (
-                    <span>관리자 상태를 확인하고 있습니다.</span>
-                  ) : isAdmin ? (
-                    <span>{adminEmail || "승인된 관리자"}로 로그인했습니다.</span>
-                  ) : adminEmail ? (
-                    <span>현재 계정은 이 사이트의 관리자로 등록되지 않았습니다.</span>
-                  ) : (
-                    <span>음원 추가·수정·삭제는 승인된 관리자만 사용할 수 있습니다.</span>
-                  )}
-                </div>
-                {authReady &&
-                  (adminEmail ? (
-                    <button
-                      className="secondary-button admin-auth-button"
-                      type="button"
-                      onClick={() => void signOutAdmin()}
-                    >
-                      로그아웃
-                    </button>
-                  ) : (
-                    <button
-                      className="secondary-button admin-auth-button"
-                      type="button"
-                      onClick={() => void signInAdmin()}
-                    >
-                      Google로 관리자 로그인
-                    </button>
-                  ))}
               </div>
               <button
                 className="primary-button full-button"

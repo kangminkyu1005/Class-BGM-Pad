@@ -123,50 +123,6 @@ input:focus-visible {
   gap: 8px;
 }
 
-.admin-mode-badge {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid rgb(6 119 114 / 24%);
-  border-radius: var(--pw-radius-pill);
-  background: var(--pw-mint);
-  padding: 0 13px;
-  color: var(--pw-teal-accessible);
-  font-size: 0.75rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.admin-mode-badge.is-denied {
-  border-color: rgb(182 74 66 / 24%);
-  background: var(--pw-coral-soft);
-  color: var(--pw-coral-text);
-}
-
-.header-logout {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 1px solid var(--pw-line);
-  border-radius: var(--pw-radius-pill);
-  background: var(--pw-white);
-  padding: 0 14px;
-  color: var(--pw-navy);
-  font-size: 0.78rem;
-  font-weight: 800;
-  transition:
-    transform 160ms var(--pw-ease),
-    border-color 160ms var(--pw-ease);
-}
-
-.header-logout:hover {
-  border-color: var(--pw-teal);
-  transform: translateY(-1px);
-}
-
 .icon-control,
 .close-button {
   display: inline-grid;
@@ -1332,44 +1288,6 @@ input[type="range"] {
   margin-block: 24px;
 }
 
-.admin-access {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 18px;
-  margin-bottom: 20px;
-  border: 1px solid var(--pw-line);
-  border-radius: var(--pw-radius-md);
-  background: var(--pw-mint);
-  padding: 16px;
-}
-
-.admin-access-copy {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.admin-access-copy .eyebrow {
-  margin: 0 0 2px;
-}
-
-.admin-access-copy strong {
-  color: var(--pw-navy);
-  font-size: 0.9rem;
-}
-
-.admin-access-copy span {
-  color: var(--pw-slate);
-  font-size: 0.74rem;
-  line-height: 1.45;
-}
-
-.admin-auth-button {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
 .full-button {
   width: 100%;
   margin-top: 12px;
@@ -1500,21 +1418,6 @@ input[type="range"] {
   .close-button {
     width: 44px;
     height: 44px;
-  }
-
-  .admin-mode-badge {
-    min-height: 32px;
-    padding-inline: 9px;
-    font-size: 0.68rem;
-  }
-
-  .header-logout {
-    width: 44px;
-    padding: 0;
-  }
-
-  .header-logout span {
-    display: none;
   }
 
   .hero {
@@ -1867,14 +1770,6 @@ input[type="range"] {
     overflow-y: auto;
     border-radius: 26px 26px 0 0;
     padding: 24px 18px;
-  }
-
-  .admin-access {
-    grid-template-columns: 1fr;
-  }
-
-  .admin-auth-button {
-    width: 100%;
   }
 
   .form-grid {
