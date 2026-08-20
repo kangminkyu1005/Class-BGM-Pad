@@ -117,6 +117,56 @@ input:focus-visible {
   letter-spacing: 0.13em;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-mode-badge {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgb(6 119 114 / 24%);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-mint);
+  padding: 0 13px;
+  color: var(--pw-teal-accessible);
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.admin-mode-badge.is-denied {
+  border-color: rgb(182 74 66 / 24%);
+  background: var(--pw-coral-soft);
+  color: var(--pw-coral-text);
+}
+
+.header-logout {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--pw-line);
+  border-radius: var(--pw-radius-pill);
+  background: var(--pw-white);
+  padding: 0 14px;
+  color: var(--pw-navy);
+  font-size: 0.78rem;
+  font-weight: 800;
+  transition:
+    transform 160ms var(--pw-ease),
+    border-color 160ms var(--pw-ease);
+}
+
+.header-logout:hover {
+  border-color: var(--pw-teal);
+  transform: translateY(-1px);
+}
+
 .icon-control,
 .close-button {
   display: inline-grid;
@@ -1450,6 +1500,21 @@ input[type="range"] {
   .close-button {
     width: 44px;
     height: 44px;
+  }
+
+  .admin-mode-badge {
+    min-height: 32px;
+    padding-inline: 9px;
+    font-size: 0.68rem;
+  }
+
+  .header-logout {
+    width: 44px;
+    padding: 0;
+  }
+
+  .header-logout span {
+    display: none;
   }
 
   .hero {

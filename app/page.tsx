@@ -22,6 +22,7 @@ import {
   Hand,
   Headphones,
   ListMusic,
+  LogOut,
   Megaphone,
   Moon,
   Music,
@@ -34,6 +35,7 @@ import {
   Repeat2,
   Search,
   Settings,
+  ShieldCheck,
   SkipBack,
   SkipForward,
   Square,
@@ -340,13 +342,15 @@ export default function Home() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
+      setButtons([]);
       void refreshAdmin();
+      void loadButtons();
     });
     return () => {
       window.clearTimeout(initialAuthCheck);
       subscription.unsubscribe();
     };
-  }, [refreshAdmin]);
+  }, [loadButtons, refreshAdmin]);
 
   useEffect(() => {
     const fallbackAudio = new Audio();
@@ -826,7 +830,7 @@ export default function Home() {
   }
 
   async function signOutAdmin() {
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut({ scope: "local" });
     if (error) {
       showToast(`로그아웃하지 못했습니다. ${error.message}`);
       return;
@@ -860,15 +864,39 @@ export default function Home() {
             <span>JUKJEON · CLASS TOOL</span>
           </div>
         </div>
-        <button
-          className="icon-control"
-          type="button"
-          onClick={() => setPanel("settings")}
-          aria-label="설정 열기"
-          title="설정"
-        >
-          <Settings aria-hidden="true" size={21} />
-        </button>
+        <div className="header-actions">
+          {authReady && adminEmail && (
+            <>
+              <span
+                className={`admin-mode-badge ${isAdmin ? "" : "is-denied"}`}
+                role="status"
+                title={adminEmail}
+              >
+                <ShieldCheck aria-hidden="true" size={16} />
+                {isAdmin ? "관리자 모드" : "관리 권한 없음"}
+              </span>
+              <button
+                className="header-logout"
+                type="button"
+                onClick={() => void signOutAdmin()}
+                aria-label="관리자 로그아웃"
+                title="로그아웃"
+              >
+                <LogOut aria-hidden="true" size={18} />
+                <span>로그아웃</span>
+              </button>
+            </>
+          )}
+          <button
+            className="icon-control"
+            type="button"
+            onClick={() => setPanel("settings")}
+            aria-label="설정 열기"
+            title="설정"
+          >
+            <Settings aria-hidden="true" size={21} />
+          </button>
+        </div>
       </header>
 
       <section className="hero">
@@ -1359,8 +1387,8 @@ export default function Home() {
             <section className="modal settings-modal" role="dialog" aria-modal="true">
               <div className="modal-head">
                 <div>
-                  <p className="eyebrow">DEFAULT SETTINGS</p>
-                  <h2>새 버튼 기본 설정</h2>
+                  <p className="eyebrow">APP SETTINGS</p>
+                  <h2>설정 및 관리자</h2>
                 </div>
                 <button
                   className="close-button"

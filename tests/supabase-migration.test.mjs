@@ -25,3 +25,10 @@ test("requires an approved administrator for content changes", () => {
   assert.match(page, /signInWithOAuth/);
   assert.match(page, /if \(!isAdmin\)/);
 });
+
+test("makes administrator status and local logout visible", () => {
+  assert.match(page, /관리자 모드/);
+  assert.match(page, /관리자 로그아웃/);
+  assert.match(page, /signOut\(\{ scope: "local" \}\)/);
+  assert.match(page, /onAuthStateChange[\s\S]*setButtons\(\[\]\)/);
+});
